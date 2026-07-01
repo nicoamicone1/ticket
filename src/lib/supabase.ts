@@ -1,10 +1,29 @@
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL?.trim();
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY?.trim();
+const sanitizeEnvVar = (val: string | undefined) => {
+  if (!val) return undefined;
+  let cleaned = val.trim();
+  if (
+    (cleaned.startsWith('"') && cleaned.endsWith('"')) ||
+    (cleaned.startsWith("'") && cleaned.endsWith("'"))
+  ) {
+    cleaned = cleaned.slice(1, -1);
+  }
+  return cleaned.trim();
+};
+
+const supabaseUrl = sanitizeEnvVar(import.meta.env.VITE_SUPABASE_URL);
+const supabaseAnonKey = sanitizeEnvVar(import.meta.env.VITE_SUPABASE_ANON_KEY);
+
+console.log('Supabase Client Config:', {
+  hasUrl: !!supabaseUrl,
+  urlStart: supabaseUrl?.substring(0, 15),
+  hasKey: !!supabaseAnonKey,
+  keyLength: supabaseAnonKey?.length,
+});
 
 if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error('Faltan las variables de entorno de Supabase en .env.local');
+  throw new Error('Faltan las variables de entorno de Supabase');
 }
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
