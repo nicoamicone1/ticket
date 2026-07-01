@@ -9,7 +9,8 @@ const sanitizeEnvVar = (val: string | undefined) => {
   ) {
     cleaned = cleaned.slice(1, -1);
   }
-  return cleaned.trim();
+  // Remove any whitespace, newlines, or carriage returns from anywhere in the string
+  return cleaned.replace(/\s+/g, '');
 };
 
 const supabaseUrl = sanitizeEnvVar(import.meta.env.VITE_SUPABASE_URL);
