@@ -1,10 +1,13 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import type { Ticket, Space } from '@/lib/types';
+import { getTicketStats } from '@/lib/utils';
 import { StatsCard } from '@/components/dashboard/StatsCard';
 import { SimpleBarChart } from '@/components/dashboard/SimpleBarChart';
 import { Card } from '@/components/ui/Card';
+import { Button } from '@/components/ui/Button';
+import { Spinner } from '@/components/ui/Spinner';
 import { Link } from 'react-router';
 import { ClipboardList, Clock, CheckCircle2, ArrowRight, Play, Briefcase } from 'lucide-react';
 
@@ -13,11 +16,12 @@ export const DashboardPage: React.FC = () => {
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [spaces, setSpaces] = useState<Space[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
 
-  useEffect(() => {
-    const loadDashboardData = async () => {
+  const loadDashboardData = useCallback(async () => {
       if (!profile) return;
       setIsLoading(true);
+      setLoadError(false);
       try {
         // 1. Obtener espacios en los que participa el usuario
         let spacesQuery = supabase.from('spaces').select('*');
@@ -44,36 +48,44 @@ export const DashboardPage: React.FC = () => {
 
           if (ticketsError) throw ticketsError;
           setTickets(ticketsData as Ticket[]);
+        } else {
+          setTickets([]);
         }
       } catch (err) {
         console.error('Error al cargar datos del dashboard:', err);
+        setLoadError(true);
       } finally {
         setIsLoading(false);
       }
-    };
-
-    loadDashboardData();
   }, [profile]);
 
+  useEffect(() => {
+    loadDashboardData();
+  }, [loadDashboardData]);
+
   if (isLoading) {
+    return <Spinner centered />;
+  }
+
+  if (loadError) {
     return (
-      <div style={{ display: 'flex', justifyContent: 'center', padding: '64px' }}>
-        <div style={{ width: '32px', height: '32px', borderRadius: '50%', border: '3px solid var(--color-primary-light)', borderTopColor: 'var(--color-primary)', animation: 'spin 1s linear infinite' }} />
-      </div>
+      <Card style={{ padding: '32px', textAlign: 'center' }}>
+        <h3 className="semibold text-lg" style={{ color: 'var(--color-error)' }}>No se pudo cargar el dashboard</h3>
+        <p className="text-muted text-sm" style={{ marginTop: '8px', marginBottom: '16px' }}>Revisá tu conexión e intentá de nuevo.</p>
+        <Button variant="primary" onClick={loadDashboardData}>Reintentar</Button>
+      </Card>
     );
   }
 
   const isClient = profile?.role === 'cliente';
 
-  // Métricas generales
-  const totalApprovedHours = tickets
-    .filter(t => t.status !== 'rechazado' && t.status !== 'pendiente')
-    .reduce((sum, t) => sum + (t.estimated_hours || 0), 0);
-
-  const pendingCount = tickets.filter(t => t.status === 'pendiente').length;
-  const estimatedCount = tickets.filter(t => t.status === 'estimado').length;
-  const inProgressCount = tickets.filter(t => t.status === 'en_progreso').length;
-  const resolvedCount = tickets.filter(t => t.status === 'resuelto').length;
+  // Métricas generales (las horas aprobadas excluyen estimaciones sin aprobar)
+  const stats = getTicketStats(tickets);
+  const totalApprovedHours = stats.approvedHours;
+  const pendingCount = stats.pending;
+  const estimatedCount = stats.estimated;
+  const inProgressCount = stats.inProgress;
+  const resolvedCount = stats.resolved;
 
   // Acción requerida
   const actionTickets = tickets.filter((t) => {

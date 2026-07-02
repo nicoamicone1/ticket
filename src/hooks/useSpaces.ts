@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import type { Space } from '@/lib/types';
 import { useAuth } from '@/contexts/AuthContext';
+import { getErrorMessage } from '@/lib/utils';
 
 export const useSpaces = () => {
   const { profile } = useAuth();
@@ -9,8 +10,11 @@ export const useSpaces = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const profileId = profile?.id;
+  const profileRole = profile?.role;
+
   const fetchSpaces = useCallback(async () => {
-    if (!profile) return;
+    if (!profileId) return;
     setIsLoading(true);
     setError(null);
     try {
@@ -22,72 +26,50 @@ export const useSpaces = () => {
           programmer:programmer_id (id, full_name, email, avatar_url)
         `);
 
-      if (profile.role === 'cliente') {
-        query = query.eq('client_id', profile.id);
+      if (profileRole === 'cliente') {
+        query = query.eq('client_id', profileId);
       } else {
-        query = query.eq('programmer_id', profile.id);
+        query = query.eq('programmer_id', profileId);
       }
 
       const { data, error: fetchError } = await query;
       if (fetchError) throw fetchError;
       setSpaces(data as Space[]);
-    } catch (err: any) {
+    } catch (err) {
       console.error(err);
-      setError(err.message || 'Error al obtener espacios');
+      setError(getErrorMessage(err, 'Error al obtener espacios'));
     } finally {
       setIsLoading(false);
     }
-  }, [profile]);
+  }, [profileId, profileRole]);
 
   const joinSpace = useCallback(async (inviteCode: string) => {
-    if (!profile || profile.role !== 'cliente') {
+    if (!profileId || profileRole !== 'cliente') {
       throw new Error('Solo los clientes pueden unirse a espacios');
     }
     setIsLoading(true);
     setError(null);
 
     try {
-      // 1. Buscar el programador por su código de invitación
-      const { data: programmerProfile, error: searchError } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('invite_code', inviteCode.trim().toUpperCase())
-        .eq('role', 'programador')
-        .maybeSingle();
-
-      if (searchError) throw searchError;
-      if (!programmerProfile) {
-        throw new Error('Código de invitación inválido o programador no encontrado');
-      }
-
-      // 2. Crear el espacio
-      const { data: newSpace, error: insertError } = await supabase
-        .from('spaces')
-        .insert({
-          client_id: profile.id,
-          programmer_id: programmerProfile.id,
-          name: `Espacio: ${programmerProfile.full_name}`
-        })
-        .select()
+      // La validación del código y la creación del espacio ocurren en el
+      // servidor (RPC SECURITY DEFINER): el cliente nunca lee perfiles ajenos.
+      const { data: newSpace, error: rpcError } = await supabase
+        .rpc('join_space', { p_invite_code: inviteCode.trim() })
         .single();
 
-      if (insertError) {
-        if (insertError.code === '23505') { // UNIQUE constraint violation
-          throw new Error('Ya estás enlazado con este programador');
-        }
-        throw insertError;
-      }
+      if (rpcError) throw rpcError;
 
       await fetchSpaces();
       return newSpace as Space;
-    } catch (err: any) {
+    } catch (err) {
       console.error(err);
-      setError(err.message || 'Error al unirse al espacio');
-      throw err;
+      const message = getErrorMessage(err, 'Error al unirse al espacio');
+      setError(message);
+      throw new Error(message);
     } finally {
       setIsLoading(false);
     }
-  }, [profile, fetchSpaces]);
+  }, [profileId, profileRole, fetchSpaces]);
 
   return {
     spaces,

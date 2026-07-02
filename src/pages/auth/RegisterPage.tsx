@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/Input';
 import type { UserRole } from '@/lib/types';
 import { Link, useNavigate } from 'react-router';
 import { Mail, Lock, User, UserCheck, Briefcase } from 'lucide-react';
+import { getErrorMessage } from '@/lib/utils';
 
 export const RegisterPage: React.FC = () => {
   const { signUp } = useAuth();
@@ -31,15 +32,15 @@ export const RegisterPage: React.FC = () => {
 
     setIsLoading(true);
     try {
-      const { error } = await signUp(email, password, fullName, role);
+      const { error } = await signUp(email.trim(), password, fullName.trim(), role);
       if (error) {
         toast.error(error.message || 'Error al registrarse');
       } else {
         toast.success('¡Registro exitoso! Por favor, verifica tu correo.');
         navigate('/login');
       }
-    } catch (err: any) {
-      toast.error('Ocurrió un error inesperado');
+    } catch (err) {
+      toast.error(getErrorMessage(err));
     } finally {
       setIsLoading(false);
     }

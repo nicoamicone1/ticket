@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 
@@ -14,21 +14,32 @@ export const RejectModal: React.FC<RejectModalProps> = ({
   onConfirm
 }) => {
   const [reason, setReason] = useState('');
+  const [validationError, setValidationError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Resetear el formulario cada vez que se cierra el modal
+  useEffect(() => {
+    if (!isOpen) {
+      setReason('');
+      setValidationError('');
+      setIsSubmitting(false);
+    }
+  }, [isOpen]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!reason.trim()) {
-      alert('Por favor, ingresá una razón para rechazar la estimación.');
+      setValidationError('Ingresá el motivo del rechazo.');
       return;
     }
+    setValidationError('');
 
     setIsSubmitting(true);
     try {
-      await onConfirm(reason);
+      await onConfirm(reason.trim());
       onClose();
-      setReason('');
     } catch (err) {
+      // El padre ya mostró el error (toast); el modal queda abierto y conserva el motivo
       console.error(err);
     } finally {
       setIsSubmitting(false);
@@ -36,14 +47,15 @@ export const RejectModal: React.FC<RejectModalProps> = ({
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Rechazar Estimación de Horas">
+    <Modal isOpen={isOpen} onClose={onClose} title="Rechazar Estimación de Horas" disableClose={isSubmitting}>
       <form onSubmit={handleSubmit}>
         <p className="text-muted text-sm" style={{ marginBottom: '16px' }}>
           Explicá al programador el motivo del rechazo. Esto le permitirá re-estimar las horas de acuerdo a tus comentarios.
         </p>
         <div className="form-group">
-          <label className="form-label">Motivo de rechazo</label>
+          <label className="form-label" htmlFor="reject-reason">Motivo de rechazo</label>
           <textarea
+            id="reject-reason"
             className="form-control"
             rows={4}
             placeholder="Ej. Me parece excesivo para el requerimiento, podríamos dividirlo..."
@@ -53,6 +65,7 @@ export const RejectModal: React.FC<RejectModalProps> = ({
             autoFocus
             style={{ resize: 'vertical' }}
           />
+          {validationError && <span className="form-error-msg">{validationError}</span>}
         </div>
         <div className="flex justify-between gap-3" style={{ marginTop: '24px' }}>
           <Button type="button" variant="ghost" onClick={onClose} disabled={isSubmitting}>

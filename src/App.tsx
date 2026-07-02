@@ -3,6 +3,7 @@ import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import { ToastProvider } from '@/contexts/ToastContext';
 import { NotificationProvider } from '@/contexts/NotificationContext';
 import { AppLayout } from '@/components/layout/AppLayout';
+import { Spinner } from '@/components/ui/Spinner';
 import { LoginPage } from '@/pages/auth/LoginPage';
 import { RegisterPage } from '@/pages/auth/RegisterPage';
 import { DashboardPage } from '@/pages/dashboard/DashboardPage';
@@ -12,31 +13,26 @@ import { TicketDetailPage } from '@/pages/tickets/TicketDetailPage';
 import { CreateTicketPage } from '@/pages/tickets/CreateTicketPage';
 import { NotificationsPage } from '@/pages/notifications/NotificationsPage';
 
+const FullScreenLoader = () => (
+  <div style={{
+    display: 'flex',
+    minHeight: '100vh',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'var(--color-bg)'
+  }}>
+    <div className="flex flex-col align-center gap-3">
+      <h2 className="bold text-xl" style={{ color: 'var(--color-primary)' }}>Cargando Ticket...</h2>
+      <Spinner size={40} />
+    </div>
+  </div>
+);
+
 const ProtectedRoute = () => {
   const { user, isLoading } = useAuth();
 
   if (isLoading) {
-    return (
-      <div style={{
-        display: 'flex',
-        minHeight: '100vh',
-        alignItems: 'center',
-        justifyContent: 'center',
-        backgroundColor: 'var(--color-bg)'
-      }}>
-        <div className="flex flex-col align-center gap-3">
-          <h2 className="bold text-xl" style={{ color: 'var(--color-primary)' }}>Cargando Ticket...</h2>
-          <div style={{
-            width: '40px',
-            height: '40px',
-            borderRadius: '50%',
-            border: '3px solid var(--color-primary-light)',
-            borderTopColor: 'var(--color-primary)',
-            animation: 'spin 1s linear infinite'
-          }} />
-        </div>
-      </div>
-    );
+    return <FullScreenLoader />;
   }
 
   if (!user) {
@@ -49,7 +45,7 @@ const ProtectedRoute = () => {
 const PublicRoute = () => {
   const { user, isLoading } = useAuth();
 
-  if (isLoading) return null;
+  if (isLoading) return <FullScreenLoader />;
 
   if (user) {
     return <Navigate to="/" replace />;

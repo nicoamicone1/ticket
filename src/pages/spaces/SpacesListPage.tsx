@@ -8,6 +8,8 @@ import { Modal } from '@/components/ui/Modal';
 import { Input } from '@/components/ui/Input';
 import { Link } from 'react-router';
 import { Copy, Plus, ArrowRight, User, Briefcase, Mail } from 'lucide-react';
+import { copyToClipboard, getErrorMessage } from '@/lib/utils';
+import { Spinner } from '@/components/ui/Spinner';
 
 export const SpacesListPage: React.FC = () => {
   const { profile } = useAuth();
@@ -22,10 +24,14 @@ export const SpacesListPage: React.FC = () => {
     fetchSpaces();
   }, [fetchSpaces]);
 
-  const handleCopyCode = () => {
+  const handleCopyCode = async () => {
     if (profile?.invite_code) {
-      navigator.clipboard.writeText(profile.invite_code);
-      toast.success('¡Código de invitación copiado!');
+      const copied = await copyToClipboard(profile.invite_code);
+      if (copied) {
+        toast.success('¡Código de invitación copiado!');
+      } else {
+        toast.error('No se pudo copiar. Seleccioná el código manualmente.');
+      }
     }
   };
 
@@ -42,8 +48,8 @@ export const SpacesListPage: React.FC = () => {
       toast.success('¡Te uniste al espacio con éxito!');
       setIsModalOpen(false);
       setInviteCode('');
-    } catch (err: any) {
-      toast.error(err.message || 'Error al unirse al espacio');
+    } catch (err) {
+      toast.error(getErrorMessage(err, 'Error al unirse al espacio'));
     } finally {
       setIsJoining(false);
     }
@@ -94,9 +100,7 @@ export const SpacesListPage: React.FC = () => {
 
       {/* Lista de Espacios */}
       {isLoading && spaces.length === 0 ? (
-        <div style={{ display: 'flex', justifyContent: 'center', padding: '64px' }}>
-          <div style={{ width: '32px', height: '32px', borderRadius: '50%', border: '3px solid var(--color-primary-light)', borderTopColor: 'var(--color-primary)', animation: 'spin 1s linear infinite' }} />
-        </div>
+        <Spinner centered />
       ) : spaces.length === 0 ? (
         <Card style={{ padding: '64px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px' }}>
           <div style={{ width: '64px', height: '64px', borderRadius: '50%', backgroundColor: 'var(--color-gray-100)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--color-gray-400)' }} className="justify-center">

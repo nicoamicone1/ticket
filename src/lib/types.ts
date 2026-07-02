@@ -80,12 +80,17 @@ export interface CommentAttachment {
   created_at: string;
 }
 
+export interface TicketActivityMetadata {
+  estimated_hours?: number;
+  rejection_reason?: string;
+}
+
 export interface TicketActivity {
   id: string;
   ticket_id: string;
   actor_id: string;
   action: 'created' | 'estimated' | 'approved' | 'rejected' | 'started' | 'resolved' | 'commented';
-  metadata: Record<string, any> | null;
+  metadata: TicketActivityMetadata | null;
   created_at: string;
   // Joins opcionales
   actor?: Profile;

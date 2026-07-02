@@ -1,17 +1,17 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState, useMemo, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import type { Profile, UserRole } from '@/lib/types';
-import type { Session, User } from '@supabase/supabase-js';
+import type { AuthError, Session, User } from '@supabase/supabase-js';
 
 interface AuthContextType {
   user: User | null;
   profile: Profile | null;
   session: Session | null;
   isLoading: boolean;
-  signIn: (email: string, password: string) => Promise<{ error: any }>;
-  signUp: (email: string, password: string, fullName: string, role: UserRole) => Promise<{ error: any }>;
-  signInWithGoogle: (roleForNewUser?: UserRole) => Promise<{ error: any }>;
-  signOut: () => Promise<{ error: any }>;
+  signIn: (email: string, password: string) => Promise<{ error: AuthError | null }>;
+  signUp: (email: string, password: string, fullName: string, role: UserRole) => Promise<{ error: AuthError | null }>;
+  signInWithGoogle: () => Promise<{ error: AuthError | null }>;
+  signOut: () => Promise<{ error: AuthError | null }>;
   refreshProfile: () => Promise<void>;
 }
 
@@ -23,53 +23,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  const fetchProfile = async (userId: string) => {
-    try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', userId)
-        .single();
-
-      if (error) {
-        console.error('Error fetching profile:', error);
-        setProfile(null);
-      } else {
-        setProfile(data as Profile);
-      }
-    } catch (e) {
-      console.error(e);
-      setProfile(null);
-    }
-  };
-
-  const refreshProfile = async () => {
-    if (user) {
-      await fetchProfile(user.id);
-    }
-  };
-
+  // Única fuente de verdad de la sesión. Importante: no llamar funciones
+  // async del cliente Supabase dentro del callback (riesgo de deadlock);
+  // el perfil se carga en un efecto aparte cuando cambia el usuario.
   useEffect(() => {
-    // Check active sessions
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        fetchProfile(session.user.id).finally(() => setIsLoading(false));
-      } else {
-        setIsLoading(false);
-      }
-    });
-
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        setIsLoading(true);
-        await fetchProfile(session.user.id);
-        setIsLoading(false);
-      } else {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, newSession) => {
+      setSession(newSession);
+      // Mantener la referencia del user estable si el id no cambió
+      // (TOKEN_REFRESHED / SIGNED_IN al volver el foco no deben re-cargar la app)
+      setUser((prev) => (prev?.id === newSession?.user?.id ? prev : newSession?.user ?? null));
+      if (!newSession?.user) {
         setProfile(null);
         setIsLoading(false);
       }
@@ -80,56 +43,98 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
   }, []);
 
-  const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    return { error };
-  };
+  const userId = user?.id;
 
-  const signUp = async (email: string, password: string, fullName: string, role: UserRole) => {
+  useEffect(() => {
+    if (!userId) return;
+    let cancelled = false;
+    setIsLoading(true);
+
+    (async () => {
+      try {
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', userId)
+          .single();
+
+        if (cancelled) return;
+        if (error) {
+          console.error('Error fetching profile:', error);
+          setProfile(null);
+        } else {
+          setProfile(data as Profile);
+        }
+      } catch (e) {
+        if (cancelled) return;
+        console.error(e);
+        setProfile(null);
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [userId]);
+
+  const refreshProfile = useCallback(async () => {
+    if (!userId) return;
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', userId)
+      .single();
+
+    if (error) {
+      console.error('Error fetching profile:', error);
+    } else {
+      setProfile(data as Profile);
+    }
+  }, [userId]);
+
+  const signIn = useCallback(async (email: string, password: string) => {
+    const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+    return { error };
+  }, []);
+
+  const signUp = useCallback(async (email: string, password: string, fullName: string, role: UserRole) => {
     const { error } = await supabase.auth.signUp({
-      email,
+      email: email.trim(),
       password,
       options: {
         data: {
-          full_name: fullName,
+          full_name: fullName.trim(),
           role: role,
         },
       },
     });
     return { error };
-  };
+  }, []);
 
-  const signInWithGoogle = async (roleForNewUser?: UserRole) => {
-    // Si queremos asignar un rol a un nuevo usuario de Google, lo mandamos en metadata
+  const signInWithGoogle = useCallback(async () => {
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
         redirectTo: window.location.origin,
-        queryParams: roleForNewUser ? { role: roleForNewUser } : undefined,
       },
     });
     return { error };
-  };
+  }, []);
 
-  const signOut = async () => {
+  const signOut = useCallback(async () => {
     const { error } = await supabase.auth.signOut();
     return { error };
-  };
+  }, []);
+
+  const value = useMemo(
+    () => ({ user, profile, session, isLoading, signIn, signUp, signInWithGoogle, signOut, refreshProfile }),
+    [user, profile, session, isLoading, signIn, signUp, signInWithGoogle, signOut, refreshProfile]
+  );
 
   return (
-    <AuthContext.Provider
-      value={{
-        user,
-        profile,
-        session,
-        isLoading,
-        signIn,
-        signUp,
-        signInWithGoogle,
-        signOut,
-        refreshProfile,
-      }}
-    >
+    <AuthContext.Provider value={value}>
       {children}
     </AuthContext.Provider>
   );

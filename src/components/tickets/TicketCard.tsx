@@ -10,17 +10,6 @@ interface TicketCardProps {
 }
 
 export const TicketCard: React.FC<TicketCardProps> = ({ ticket }) => {
-  const getPriorityVariant = (priority: TicketPriority) => {
-    switch (priority) {
-      case 'baja': return 'success';
-      case 'media': return 'warning';
-      case 'alta': return 'info';
-      case 'urgente':
-      default:
-        return 'error';
-    }
-  };
-
   const getPriorityStyle = (priority: TicketPriority) => {
     switch (priority) {
       case 'baja': return 'var(--color-priority-baja)';
@@ -38,7 +27,7 @@ export const TicketCard: React.FC<TicketCardProps> = ({ ticket }) => {
         <div className="flex flex-col gap-3">
           {/* Prioridad y horas estimadas */}
           <div className="flex justify-between align-center">
-            <Badge variant={getPriorityVariant(ticket.priority)}>
+            <Badge variant={`priority-${ticket.priority}`}>
               {ticket.priority}
             </Badge>
             {ticket.estimated_hours && (
@@ -61,7 +50,7 @@ export const TicketCard: React.FC<TicketCardProps> = ({ ticket }) => {
                 <span
                   key={tag}
                   style={{
-                    fontSize: '9px',
+                    fontSize: 'var(--text-2xs)',
                     fontWeight: 'var(--font-bold)',
                     textTransform: 'uppercase',
                     letterSpacing: '0.02em',

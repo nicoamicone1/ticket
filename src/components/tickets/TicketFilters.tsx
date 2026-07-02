@@ -10,8 +10,15 @@ interface TicketFiltersProps {
 
 export const TicketFilters: React.FC<TicketFiltersProps> = ({ onFilterChange }) => {
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [priority, setPriority] = useState('');
   const [dateRange, setDateRange] = useState('all');
+
+  // Debounce del buscador: un fetch por pausa de tipeo, no por tecla
+  useEffect(() => {
+    const timeout = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(timeout);
+  }, [search]);
 
   const priorityOptions = [
     { value: '', label: 'Todas las prioridades' },
@@ -31,8 +38,8 @@ export const TicketFilters: React.FC<TicketFiltersProps> = ({ onFilterChange }) 
   useEffect(() => {
     const filters: FilterType = {};
 
-    if (search.trim()) {
-      filters.search = search;
+    if (debouncedSearch.trim()) {
+      filters.search = debouncedSearch.trim();
     }
 
     if (priority) {
@@ -55,7 +62,7 @@ export const TicketFilters: React.FC<TicketFiltersProps> = ({ onFilterChange }) 
     }
 
     onFilterChange(filters);
-  }, [search, priority, dateRange, onFilterChange]);
+  }, [debouncedSearch, priority, dateRange, onFilterChange]);
 
   return (
     <div style={{
