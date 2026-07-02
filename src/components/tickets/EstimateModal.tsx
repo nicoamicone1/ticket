@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Modal } from '@/components/ui/Modal';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
@@ -15,22 +15,33 @@ export const EstimateModal: React.FC<EstimateModalProps> = ({
   onConfirm
 }) => {
   const [hours, setHours] = useState('');
+  const [validationError, setValidationError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Resetear el formulario cada vez que se cierra el modal
+  useEffect(() => {
+    if (!isOpen) {
+      setHours('');
+      setValidationError('');
+      setIsSubmitting(false);
+    }
+  }, [isOpen]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const parsedHours = parseInt(hours, 10);
-    if (isNaN(parsedHours) || parsedHours <= 0) {
-      alert('Por favor, ingresá una cantidad válida de horas.');
+    const parsedHours = Number(hours);
+    if (!Number.isInteger(parsedHours) || parsedHours <= 0) {
+      setValidationError('Ingresá una cantidad entera de horas mayor a cero.');
       return;
     }
+    setValidationError('');
 
     setIsSubmitting(true);
     try {
       await onConfirm(parsedHours);
       onClose();
-      setHours('');
     } catch (err) {
+      // El padre ya mostró el error (toast); el modal queda abierto para reintentar
       console.error(err);
     } finally {
       setIsSubmitting(false);
@@ -38,7 +49,7 @@ export const EstimateModal: React.FC<EstimateModalProps> = ({
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Estimar Horas del Ticket">
+    <Modal isOpen={isOpen} onClose={onClose} title="Estimar Horas del Ticket" disableClose={isSubmitting}>
       <form onSubmit={handleSubmit}>
         <p className="text-muted text-sm" style={{ marginBottom: '16px' }}>
           Estimá la cantidad de horas necesarias para completar este requerimiento. El cliente deberá aprobar esta estimación para comenzar a trabajar.
@@ -48,8 +59,10 @@ export const EstimateModal: React.FC<EstimateModalProps> = ({
           type="number"
           placeholder="Ej. 12"
           min="1"
+          step="1"
           value={hours}
           onChange={(e) => setHours(e.target.value)}
+          error={validationError}
           required
           autoFocus
         />

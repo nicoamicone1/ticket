@@ -11,7 +11,9 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Tabs } from '@/components/ui/Tabs';
 import { ArrowLeft, Plus, Calendar, Clock, CheckCircle2, Download } from 'lucide-react';
-import { exportToCSV } from '@/lib/utils';
+import { exportToCSV, getTicketStats } from '@/lib/utils';
+import { Spinner } from '@/components/ui/Spinner';
+import { StatsCard } from '@/components/dashboard/StatsCard';
 
 export const SpaceDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -20,12 +22,14 @@ export const SpaceDetailPage: React.FC = () => {
 
   const [space, setSpace] = useState<Space | null>(null);
   const [spaceLoading, setSpaceLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [activeTab, setActiveTab] = useState('kanban');
   const [filters, setFilters] = useState<Filters>({});
 
   const fetchSpaceDetails = useCallback(async () => {
     if (!id) return;
     setSpaceLoading(true);
+    setLoadError(false);
     try {
       const { data, error } = await supabase
         .from('spaces')
@@ -41,6 +45,10 @@ export const SpaceDetailPage: React.FC = () => {
       setSpace(data as Space);
     } catch (err) {
       console.error('Error fetching space details:', err);
+      // PGRST116 = cero filas: el espacio no existe o no hay permiso (404 real).
+      // Cualquier otro error es un fallo de red/servidor y merece reintento.
+      const code = (err as { code?: string })?.code;
+      setLoadError(code !== 'PGRST116');
     } finally {
       setSpaceLoading(false);
     }
@@ -76,33 +84,34 @@ export const SpaceDetailPage: React.FC = () => {
   };
 
   if (spaceLoading) {
-    return (
-      <div style={{ display: 'flex', justifyContent: 'center', padding: '64px' }}>
-        <div style={{ width: '32px', height: '32px', borderRadius: '50%', border: '3px solid var(--color-primary-light)', borderTopColor: 'var(--color-primary)', animation: 'spin 1s linear infinite' }} />
-      </div>
-    );
+    return <Spinner centered />;
   }
 
   if (!space) {
     return (
       <Card style={{ padding: '32px', textAlign: 'center' }}>
-        <h3 className="semibold text-lg" style={{ color: 'var(--color-error)' }}>Espacio no encontrado</h3>
-        <p className="text-muted text-sm" style={{ marginTop: '8px', marginBottom: '16px' }}>El espacio al que intentás acceder no existe o no tenés permisos.</p>
-        <Link to="/spaces" className="btn btn-secondary">Volver a Espacios</Link>
+        <h3 className="semibold text-lg" style={{ color: 'var(--color-error)' }}>
+          {loadError ? 'No se pudo cargar el espacio' : 'Espacio no encontrado'}
+        </h3>
+        <p className="text-muted text-sm" style={{ marginTop: '8px', marginBottom: '16px' }}>
+          {loadError
+            ? 'Revisá tu conexión e intentá de nuevo.'
+            : 'El espacio al que intentás acceder no existe o no tenés permisos.'}
+        </p>
+        <div className="flex justify-center gap-3">
+          {loadError && (
+            <Button variant="primary" onClick={fetchSpaceDetails}>Reintentar</Button>
+          )}
+          <Link to="/spaces" className="btn btn-secondary">Volver a Espacios</Link>
+        </div>
       </Card>
     );
   }
 
   const partner = profile?.role === 'cliente' ? space.programmer : space.client;
 
-  // Estadísticas del espacio
-  const totalHours = tickets
-    .filter(t => t.status !== 'rechazado' && t.status !== 'pendiente')
-    .reduce((sum, t) => sum + (t.estimated_hours || 0), 0);
-
-  const pendingApproval = tickets.filter(t => t.status === 'estimado').length;
-  const inProgress = tickets.filter(t => t.status === 'en_progreso').length;
-  const resolvedCount = tickets.filter(t => t.status === 'resuelto').length;
+  // Estadísticas del espacio (las horas aprobadas excluyen estimaciones sin aprobar)
+  const stats = getTicketStats(tickets);
 
   return (
     <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
@@ -133,45 +142,10 @@ export const SpaceDetailPage: React.FC = () => {
 
       {/* Tarjetas de Métricas Rápidas */}
       <div className="grid grid-cols-4 gap-4" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }}>
-        <Card style={{ padding: '16px 20px', display: 'flex', alignItems: 'center', gap: '16px' }}>
-          <div style={{ padding: '10px', borderRadius: 'var(--radius-md)', backgroundColor: 'var(--color-primary-light)', color: 'var(--color-primary)' }}>
-            <Clock size={20} />
-          </div>
-          <div>
-            <p className="text-muted text-xs font-semibold">HORAS APROBADAS</p>
-            <h4 className="bold text-xl">{totalHours}h</h4>
-          </div>
-        </Card>
-
-        <Card style={{ padding: '16px 20px', display: 'flex', alignItems: 'center', gap: '16px' }}>
-          <div style={{ padding: '10px', borderRadius: 'var(--radius-md)', backgroundColor: 'var(--color-warning-bg)', color: 'var(--color-warning)' }}>
-            <Calendar size={20} />
-          </div>
-          <div>
-            <p className="text-muted text-xs font-semibold">POR APROBAR</p>
-            <h4 className="bold text-xl">{pendingApproval}</h4>
-          </div>
-        </Card>
-
-        <Card style={{ padding: '16px 20px', display: 'flex', alignItems: 'center', gap: '16px' }}>
-          <div style={{ padding: '10px', borderRadius: 'var(--radius-md)', backgroundColor: 'var(--color-info-bg)', color: 'var(--color-info)' }}>
-            <Clock size={20} style={{ transform: 'rotate(90deg)' }} />
-          </div>
-          <div>
-            <p className="text-muted text-xs font-semibold">EN PROGRESO</p>
-            <h4 className="bold text-xl">{inProgress}</h4>
-          </div>
-        </Card>
-
-        <Card style={{ padding: '16px 20px', display: 'flex', alignItems: 'center', gap: '16px' }}>
-          <div style={{ padding: '10px', borderRadius: 'var(--radius-md)', backgroundColor: 'var(--color-success-bg)', color: 'var(--color-success)' }}>
-            <CheckCircle2 size={20} />
-          </div>
-          <div>
-            <p className="text-muted text-xs font-semibold">RESUELTOS</p>
-            <h4 className="bold text-xl">{resolvedCount}</h4>
-          </div>
-        </Card>
+        <StatsCard label="Horas aprobadas" value={`${stats.approvedHours}h`} icon={<Clock size={20} />} />
+        <StatsCard label="Por aprobar" value={stats.estimated} icon={<Calendar size={20} />} bgColor="var(--color-warning-bg)" color="var(--color-warning)" />
+        <StatsCard label="En progreso" value={stats.inProgress} icon={<Clock size={20} style={{ transform: 'rotate(90deg)' }} />} bgColor="var(--color-info-bg)" color="var(--color-info)" />
+        <StatsCard label="Resueltos" value={stats.resolved} icon={<CheckCircle2 size={20} />} bgColor="var(--color-success-bg)" color="var(--color-success)" />
       </div>
 
       {/* Filtros */}
@@ -194,9 +168,7 @@ export const SpaceDetailPage: React.FC = () => {
 
       {/* Cuerpo de Tickets */}
       {isLoading && tickets.length === 0 ? (
-        <div style={{ display: 'flex', justifyContent: 'center', padding: '64px' }}>
-          <div style={{ width: '32px', height: '32px', borderRadius: '50%', border: '3px solid var(--color-primary-light)', borderTopColor: 'var(--color-primary)', animation: 'spin 1s linear infinite' }} />
-        </div>
+        <Spinner centered />
       ) : tickets.length === 0 ? (
         <Card style={{ padding: '48px', textAlign: 'center' }}>
           <h4 className="semibold text-base">No se encontraron tickets</h4>

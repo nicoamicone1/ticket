@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Link, useNavigate } from 'react-router';
 import { Mail, Lock, LogIn } from 'lucide-react';
+import { getErrorMessage } from '@/lib/utils';
 
 export const LoginPage: React.FC = () => {
   const { signIn } = useAuth();
@@ -24,15 +25,15 @@ export const LoginPage: React.FC = () => {
 
     setIsLoading(true);
     try {
-      const { error } = await signIn(email, password);
+      const { error } = await signIn(email.trim(), password);
       if (error) {
         toast.error(error.message || 'Error de inicio de sesión');
       } else {
         toast.success('¡Sesión iniciada con éxito!');
         navigate('/');
       }
-    } catch (err: any) {
-      toast.error('Ocurrió un error inesperado');
+    } catch (err) {
+      toast.error(getErrorMessage(err));
     } finally {
       setIsLoading(false);
     }

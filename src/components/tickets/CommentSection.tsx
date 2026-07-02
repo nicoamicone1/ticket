@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useComments } from '@/hooks/useComments';
 import { useAuth } from '@/contexts/AuthContext';
+import { useToast } from '@/contexts/ToastContext';
 import { Button } from '@/components/ui/Button';
 import { Send, User } from 'lucide-react';
 
@@ -10,7 +11,8 @@ interface CommentSectionProps {
 
 export const CommentSection: React.FC<CommentSectionProps> = ({ ticketId }) => {
   const { profile } = useAuth();
-  const { comments, isLoading, fetchComments, addComment } = useComments(ticketId);
+  const toast = useToast();
+  const { comments, isLoading, error, fetchComments, addComment } = useComments(ticketId);
   const [content, setContent] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -26,8 +28,8 @@ export const CommentSection: React.FC<CommentSectionProps> = ({ ticketId }) => {
     try {
       await addComment(content);
       setContent('');
-    } catch (err) {
-      alert('Error al enviar el comentario.');
+    } catch {
+      toast.error('Error al enviar el comentario.');
     } finally {
       setIsSubmitting(false);
     }
@@ -41,6 +43,11 @@ export const CommentSection: React.FC<CommentSectionProps> = ({ ticketId }) => {
       <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', opacity: 1 }}>
         {isLoading && comments.length === 0 ? (
           <p className="text-muted text-sm">Cargando comentarios...</p>
+        ) : error && comments.length === 0 ? (
+          <div className="flex align-center gap-3" style={{ padding: '12px 0' }}>
+            <p className="text-sm" style={{ color: 'var(--color-error)' }}>No se pudieron cargar los comentarios.</p>
+            <Button variant="secondary" size="sm" onClick={fetchComments}>Reintentar</Button>
+          </div>
         ) : comments.length === 0 ? (
           <p className="text-muted text-sm" style={{ fontStyle: 'italic', padding: '12px 0' }}>No hay comentarios aún. Escribí un comentario para iniciar la conversación.</p>
         ) : (
@@ -86,7 +93,7 @@ export const CommentSection: React.FC<CommentSectionProps> = ({ ticketId }) => {
                     <span className="semibold text-xs" style={{ color: 'var(--color-black)' }}>
                       {c.author?.full_name}
                     </span>
-                    <span className="text-muted" style={{ fontSize: '10px' }}>
+                    <span className="text-muted" style={{ fontSize: 'var(--text-2xs)' }}>
                       {new Date(c.created_at).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })} - {new Date(c.created_at).toLocaleDateString('es-AR')}
                     </span>
                   </div>
@@ -105,6 +112,7 @@ export const CommentSection: React.FC<CommentSectionProps> = ({ ticketId }) => {
         <textarea
           className="form-control"
           placeholder="Escribí un comentario..."
+          aria-label="Escribir comentario"
           rows={2}
           value={content}
           onChange={(e) => setContent(e.target.value)}
@@ -115,6 +123,7 @@ export const CommentSection: React.FC<CommentSectionProps> = ({ ticketId }) => {
           type="submit"
           variant="primary"
           disabled={!content.trim() || isSubmitting}
+          aria-label="Enviar comentario"
           style={{ width: '60px', height: '60px', padding: 0 }}
         >
           <Send size={18} />

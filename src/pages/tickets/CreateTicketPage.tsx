@@ -9,13 +9,14 @@ import { Select } from '@/components/ui/Select';
 import { Card } from '@/components/ui/Card';
 import { ArrowLeft, Upload, FileText, X } from 'lucide-react';
 import { TagSelector } from '@/components/tickets/TagSelector';
+import { getErrorMessage } from '@/lib/utils';
 import '@/components/ui/ui.css';
 
 export const CreateTicketPage: React.FC = () => {
   const { spaceId } = useParams<{ spaceId: string }>();
   const navigate = useNavigate();
   const toast = useToast();
-  const { createTicket, isLoading } = useTickets();
+  const { createTicket, isMutating: isLoading } = useTickets();
   const { profile } = useAuth();
 
   const isProgrammer = profile?.role === 'programador';
@@ -59,6 +60,8 @@ export const CreateTicketPage: React.FC = () => {
     if (e.target.files && e.target.files[0]) {
       addFiles(Array.from(e.target.files));
     }
+    // Reset: permite volver a seleccionar el mismo archivo si se quitó de la lista
+    e.target.value = '';
   };
 
   const addFiles = (newFiles: File[]) => {
@@ -90,18 +93,22 @@ export const CreateTicketPage: React.FC = () => {
       return;
     }
 
-    const hoursVal = estimatedHours.trim() ? parseInt(estimatedHours, 10) : undefined;
-    if (hoursVal !== undefined && (isNaN(hoursVal) || hoursVal <= 0)) {
-      toast.error('Las horas estimadas deben ser un número positivo.');
+    const hoursVal = estimatedHours.trim() ? Number(estimatedHours) : undefined;
+    if (hoursVal !== undefined && (!Number.isInteger(hoursVal) || hoursVal <= 0)) {
+      toast.error('Las horas estimadas deben ser un número entero positivo.');
       return;
     }
 
     try {
-      await createTicket(spaceId, title, description, priority, files, selectedTags, hoursVal);
-      toast.success('¡Ticket creado con éxito!');
+      const { failedFiles } = await createTicket(spaceId, title.trim(), description.trim(), priority, files, selectedTags, hoursVal);
+      if (failedFiles.length > 0) {
+        toast.warning(`El ticket se creó, pero ${failedFiles.length} archivo(s) no pudieron adjuntarse: ${failedFiles.join(', ')}`);
+      } else {
+        toast.success('¡Ticket creado con éxito!');
+      }
       navigate(`/spaces/${spaceId}`);
-    } catch (err: any) {
-      toast.error(err.message || 'Error al crear el ticket');
+    } catch (err) {
+      toast.error(getErrorMessage(err, 'Error al crear el ticket'));
     }
   };
 

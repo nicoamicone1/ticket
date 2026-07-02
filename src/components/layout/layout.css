@@ -114,7 +114,7 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background-color: rgba(0, 0, 0, 0.4);
+  background-color: var(--color-overlay);
   z-index: 90;
   backdrop-filter: blur(2px);
 }
@@ -131,11 +131,15 @@
 @media (max-width: 1024px) {
   .app-sidebar {
     transform: translateX(-100%);
-    transition: transform var(--transition-normal);
+    /* visibility saca el sidebar cerrado del orden de tabulación */
+    visibility: hidden;
+    transition: transform var(--transition-normal), visibility 0s linear 0.25s;
   }
 
   .app-sidebar.open {
     transform: translateX(0);
+    visibility: visible;
+    transition: transform var(--transition-normal), visibility 0s;
   }
 
   .sidebar-overlay.open {

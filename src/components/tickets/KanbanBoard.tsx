@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import type { Ticket, TicketStatus } from '@/lib/types';
 import { TicketCard } from './TicketCard';
 import { ClipboardList, Calculator, CheckCircle2, Play, Check, ChevronLeft, ChevronRight } from 'lucide-react';
+import '@/components/ui/ui.css';
 
 interface KanbanBoardProps {
   tickets: Ticket[];
@@ -43,14 +44,13 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tickets }) => {
   return (
     <div style={{
       display: 'grid',
-      gridTemplateColumns: columns.map(col => 
+      gridTemplateColumns: columns.map(col =>
         collapsedColumns[col.id] ? '50px' : 'minmax(240px, 1fr)'
       ).join(' '),
       gap: '16px',
       overflowX: 'auto',
       paddingBottom: '16px',
-      alignItems: 'start',
-      transition: 'grid-template-columns 0.3s ease'
+      alignItems: 'start'
     }}>
       {columns.map((col) => {
         const colTickets = getTicketsByStatus(col.id);
@@ -58,61 +58,25 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tickets }) => {
 
         if (isCollapsed) {
           return (
-            <div
+            <button
               key={col.id}
+              type="button"
               onClick={() => toggleColumn(col.id)}
-              style={{
-                backgroundColor: 'var(--color-gray-100)',
-                borderRadius: 'var(--radius-md)',
-                padding: '16px 8px',
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                gap: '16px',
-                minHeight: '400px',
-                cursor: 'pointer',
-                userSelect: 'none',
-                width: '50px',
-                overflow: 'hidden',
-                borderTop: `4px solid ${col.color}`,
-                boxShadow: 'var(--shadow-sm)',
-                transition: 'background-color var(--transition-fast)'
-              }}
+              className="kanban-column-collapsed"
+              style={{ borderTop: `4px solid ${col.color}` }}
+              aria-expanded={false}
+              aria-label={`Expandir columna ${col.label} (${colTickets.length} tickets)`}
               title={`Expandir columna: ${col.label}`}
-              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--color-gray-200)'}
-              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'var(--color-gray-100)'}
             >
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  toggleColumn(col.id);
-                }}
-                style={{
-                  color: 'var(--color-gray-400)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  padding: '2px',
-                  borderRadius: 'var(--radius-xs)',
-                  cursor: 'pointer'
-                }}
-              >
+              <span className="kanban-toggle-btn" aria-hidden="true">
                 <ChevronRight size={16} />
-              </button>
+              </span>
 
-              <div style={{ color: col.color, display: 'flex', justifyContent: 'center' }}>
+              <span style={{ color: col.color, display: 'flex', justifyContent: 'center' }} aria-hidden="true">
                 {col.icon}
-              </div>
+              </span>
 
-              <span style={{
-                fontSize: 'var(--text-xs)',
-                fontWeight: 'var(--font-bold)',
-                backgroundColor: 'var(--color-white)',
-                padding: '2px 6px',
-                borderRadius: 'var(--radius-full)',
-                boxShadow: 'var(--shadow-sm)',
-                color: 'var(--color-gray-700)'
-              }}>
+              <span className="kanban-count-pill">
                 {colTickets.length}
               </span>
 
@@ -128,23 +92,12 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tickets }) => {
               }}>
                 {col.label}
               </span>
-            </div>
+            </button>
           );
         }
 
         return (
-          <div
-            key={col.id}
-            style={{
-              backgroundColor: 'var(--color-gray-100)',
-              borderRadius: 'var(--radius-md)',
-              padding: '16px',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '16px',
-              minHeight: '400px'
-            }}
-          >
+          <div key={col.id} className="kanban-column">
             {/* Header columna */}
             <div className="flex align-center justify-between" style={{ borderBottom: `2px solid ${col.color}`, paddingBottom: '8px' }}>
               <div className="flex align-center gap-2" style={{ color: 'var(--color-black)' }}>
@@ -152,30 +105,15 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tickets }) => {
                 <span className="semibold text-sm">{col.label}</span>
               </div>
               <div className="flex align-center gap-2">
-                <span style={{
-                  fontSize: 'var(--text-xs)',
-                  fontWeight: 'var(--font-bold)',
-                  backgroundColor: 'var(--color-white)',
-                  padding: '2px 8px',
-                  borderRadius: 'var(--radius-full)',
-                  boxShadow: 'var(--shadow-sm)'
-                }}>
+                <span className="kanban-count-pill">
                   {colTickets.length}
                 </span>
                 <button
+                  type="button"
                   onClick={() => toggleColumn(col.id)}
-                  style={{
-                    color: 'var(--color-gray-400)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    padding: '2px',
-                    borderRadius: 'var(--radius-xs)',
-                    cursor: 'pointer',
-                    transition: 'color var(--transition-fast)'
-                  }}
-                  onMouseEnter={(e) => e.currentTarget.style.color = 'var(--color-gray-700)'}
-                  onMouseLeave={(e) => e.currentTarget.style.color = 'var(--color-gray-400)'}
+                  className="kanban-toggle-btn"
+                  aria-expanded={true}
+                  aria-label={`Colapsar columna ${col.label}`}
                   title="Colapsar columna"
                 >
                   <ChevronLeft size={16} />
@@ -192,14 +130,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ tickets }) => {
               maxHeight: '600px'
             }}>
               {colTickets.length === 0 ? (
-                <div style={{
-                  padding: '32px 16px',
-                  textAlign: 'center',
-                  color: 'var(--color-gray-400)',
-                  fontSize: 'var(--text-xs)',
-                  border: '1px dashed var(--color-gray-200)',
-                  borderRadius: 'var(--radius-sm)'
-                }}>
+                <div className="kanban-empty">
                   No hay tickets
                 </div>
               ) : (

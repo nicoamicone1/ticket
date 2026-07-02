@@ -1,7 +1,9 @@
 import React from 'react';
 import { useNotifications } from '@/contexts/NotificationContext';
+import type { Notification } from '@/lib/types';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
+import { Spinner } from '@/components/ui/Spinner';
 import { useNavigate } from 'react-router';
 import { Check, BellOff, MessageSquare, PlusCircle, Calculator, CheckCircle2, PlayCircle, AlertTriangle } from 'lucide-react';
 
@@ -9,7 +11,7 @@ export const NotificationsPage: React.FC = () => {
   const { notifications, isLoading, markAsRead, markAllAsRead } = useNotifications();
   const navigate = useNavigate();
 
-  const handleNotificationClick = async (notif: any) => {
+  const handleNotificationClick = async (notif: Notification) => {
     if (!notif.is_read) {
       await markAsRead(notif.id);
     }
@@ -57,9 +59,7 @@ export const NotificationsPage: React.FC = () => {
 
       {/* Lista */}
       {isLoading && notifications.length === 0 ? (
-        <div style={{ display: 'flex', justifyContent: 'center', padding: '64px' }}>
-          <div style={{ width: '32px', height: '32px', borderRadius: '50%', border: '3px solid var(--color-primary-light)', borderTopColor: 'var(--color-primary)', animation: 'spin 1s linear infinite' }} />
-        </div>
+        <Spinner centered />
       ) : notifications.length === 0 ? (
         <Card style={{ padding: '64px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px' }}>
           <div style={{ width: '64px', height: '64px', borderRadius: '50%', backgroundColor: 'var(--color-gray-100)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--color-gray-400)' }} className="justify-center">
@@ -74,6 +74,15 @@ export const NotificationsPage: React.FC = () => {
             <div
               key={notif.id}
               onClick={() => handleNotificationClick(notif)}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  handleNotificationClick(notif);
+                }
+              }}
+              aria-label={`${notif.is_read ? '' : 'No leída: '}${notif.title}`}
               style={{
                 display: 'flex',
                 alignItems: 'start',
@@ -120,7 +129,7 @@ export const NotificationsPage: React.FC = () => {
               <div className="flex-1">
                 <h4 className="semibold text-sm" style={{ color: 'var(--color-black)', marginBottom: '2px' }}>{notif.title}</h4>
                 <p className="text-muted text-xs">{notif.body}</p>
-                <span className="text-muted" style={{ fontSize: '10px', marginTop: '6px', display: 'inline-block' }}>
+                <span className="text-muted" style={{ fontSize: 'var(--text-2xs)', marginTop: '6px', display: 'inline-block' }}>
                   {new Date(notif.created_at).toLocaleDateString('es-AR')} a las {new Date(notif.created_at).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}
                 </span>
               </div>

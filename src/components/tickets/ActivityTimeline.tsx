@@ -1,17 +1,20 @@
 import React, { useEffect } from 'react';
 import { useTicketActivity } from '@/hooks/useTicketActivity';
+import type { TicketActivityMetadata } from '@/lib/types';
 import { PlusCircle, Clock, CheckCircle2, AlertTriangle, PlayCircle, Trophy, MessageSquare } from 'lucide-react';
 
 interface ActivityTimelineProps {
   ticketId: string;
+  /** Cambiar este valor (p. ej. updated_at del ticket) re-carga el historial */
+  refreshToken?: string | number;
 }
 
-export const ActivityTimeline: React.FC<ActivityTimelineProps> = ({ ticketId }) => {
+export const ActivityTimeline: React.FC<ActivityTimelineProps> = ({ ticketId, refreshToken }) => {
   const { activities, isLoading, fetchActivities } = useTicketActivity(ticketId);
 
   useEffect(() => {
     fetchActivities();
-  }, [fetchActivities]);
+  }, [fetchActivities, refreshToken]);
 
   const getActivityIcon = (action: string) => {
     switch (action) {
@@ -33,7 +36,7 @@ export const ActivityTimeline: React.FC<ActivityTimelineProps> = ({ ticketId }) 
     }
   };
 
-  const formatActionText = (action: string, metadata: any, actorName: string) => {
+  const formatActionText = (action: string, metadata: TicketActivityMetadata | null, actorName: string) => {
     switch (action) {
       case 'created':
         return `${actorName} creó este ticket.`;
@@ -92,7 +95,7 @@ export const ActivityTimeline: React.FC<ActivityTimelineProps> = ({ ticketId }) 
               <span className="semibold text-sm" style={{ color: 'var(--color-black)' }}>
                 {formatActionText(act.action, act.metadata, act.actor?.full_name || 'Alguien')}
               </span>
-              <span className="text-muted" style={{ fontSize: '10px', marginTop: '2px' }}>
+              <span className="text-muted" style={{ fontSize: 'var(--text-2xs)', marginTop: '2px' }}>
                 {new Date(act.created_at).toLocaleDateString('es-AR')} a las {new Date(act.created_at).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}
               </span>
             </div>

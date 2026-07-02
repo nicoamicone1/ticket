@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { NavLink } from 'react-router';
 import { useAuth } from '@/contexts/AuthContext';
 import { LayoutDashboard, FolderKanban, Bell, LogOut, Briefcase, User } from 'lucide-react';
 import { useNotifications } from '@/contexts/NotificationContext';
+import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import './layout.css';
 
 interface SidebarProps {
@@ -13,12 +14,7 @@ interface SidebarProps {
 export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
   const { profile, signOut } = useAuth();
   const { unreadCount } = useNotifications();
-
-  const handleLogout = async () => {
-    if (window.confirm('¿Seguro que querés cerrar sesión?')) {
-      await signOut();
-    }
-  };
+  const [isLogoutOpen, setIsLogoutOpen] = useState(false);
 
   const navItems = [
     { to: '/', label: 'Dashboard', icon: <LayoutDashboard size={18} /> },
@@ -29,7 +25,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
   return (
     <>
       {/* Overlay to close sidebar on mobile click */}
-      <div className={`sidebar-overlay ${isOpen ? 'open' : ''}`} onClick={onClose} />
+      <div className={`sidebar-overlay ${isOpen ? 'open' : ''}`} onClick={onClose} aria-hidden="true" />
 
       <aside className={`app-sidebar ${isOpen ? 'open' : ''}`}>
         <div className="sidebar-header">
@@ -95,7 +91,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
           )}
 
           <button
-            onClick={handleLogout}
+            onClick={() => setIsLogoutOpen(true)}
             className="sidebar-link"
             style={{ width: '100%', border: 'none', background: 'transparent', textAlign: 'left', cursor: 'pointer' }}
           >
@@ -104,6 +100,16 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
           </button>
         </div>
       </aside>
+
+      <ConfirmModal
+        isOpen={isLogoutOpen}
+        onClose={() => setIsLogoutOpen(false)}
+        onConfirm={async () => { await signOut(); }}
+        title="Cerrar Sesión"
+        message="¿Seguro que querés cerrar sesión?"
+        confirmLabel="Cerrar Sesión"
+        variant="danger"
+      />
     </>
   );
 };

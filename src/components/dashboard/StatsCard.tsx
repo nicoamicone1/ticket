@@ -30,7 +30,7 @@ export const StatsCard: React.FC<StatsCardProps> = ({
         {icon}
       </div>
       <div>
-        <p className="text-muted text-xs font-semibold" style={{ textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+        <p className="text-muted text-xs semibold" style={{ textTransform: 'uppercase', letterSpacing: '0.05em' }}>
           {label}
         </p>
         <h4 className="bold text-2xl" style={{ color: 'var(--color-black)', marginTop: '4px' }}>

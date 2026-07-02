@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import type { Notification } from '@/lib/types';
 import { useAuth } from '@/contexts/AuthContext';
@@ -19,33 +19,42 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const { user } = useAuth();
   const toast = useToast();
   const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [unreadCount, setUnreadCount] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
 
+  // Ref para usar toast dentro de la suscripción sin re-crear el canal Realtime
+  const toastRef = useRef(toast);
+  toastRef.current = toast;
+
+  const userId = user?.id;
+
+  // Derivado del estado: no puede desincronizarse de la lista
+  const unreadCount = useMemo(
+    () => notifications.filter((n) => !n.is_read).length,
+    [notifications]
+  );
+
   const fetchNotifications = useCallback(async () => {
-    if (!user) return;
+    if (!userId) return;
     setIsLoading(true);
     try {
       const { data, error } = await supabase
         .from('notifications')
         .select('*')
-        .eq('user_id', user.id)
+        .eq('user_id', userId)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
       setNotifications(data as Notification[]);
-      setUnreadCount(data.filter((n) => !n.is_read).length);
     } catch (err) {
       console.error('Error fetching notifications:', err);
     } finally {
       setIsLoading(false);
     }
-  }, [user]);
+  }, [userId]);
 
   useEffect(() => {
-    if (!user) {
+    if (!userId) {
       setNotifications([]);
-      setUnreadCount(0);
       return;
     }
 
@@ -53,22 +62,24 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
     // Suscripción Realtime a nuevas notificaciones
     const subscription = supabase
-      .channel(`user_notifications_${user.id}`)
+      .channel(`user_notifications_${userId}`)
       .on(
         'postgres_changes',
         {
           event: 'INSERT',
           schema: 'public',
           table: 'notifications',
-          filter: `user_id=eq.${user.id}`
+          filter: `user_id=eq.${userId}`
         },
         (payload) => {
           const newNotif = payload.new as Notification;
-          setNotifications((prev) => [newNotif, ...prev]);
-          setUnreadCount((prev) => prev + 1);
-          
+          // Deduplicar: puede llegar por Realtime y por un fetch en vuelo
+          setNotifications((prev) =>
+            prev.some((n) => n.id === newNotif.id) ? prev : [newNotif, ...prev]
+          );
+
           // Mostrar un toast in-app
-          toast.info(`${newNotif.title}: ${newNotif.body}`);
+          toastRef.current.info(`${newNotif.title}: ${newNotif.body}`);
         }
       )
       .subscribe();
@@ -76,9 +87,9 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     return () => {
       subscription.unsubscribe();
     };
-  }, [user, fetchNotifications, toast]);
+  }, [userId, fetchNotifications]);
 
-  const markAsRead = async (id: string) => {
+  const markAsRead = useCallback(async (id: string) => {
     try {
       const { error } = await supabase
         .from('notifications')
@@ -86,46 +97,42 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
         .eq('id', id);
 
       if (error) throw error;
-      
+
       setNotifications((prev) =>
         prev.map((n) => (n.id === id ? { ...n, is_read: true } : n))
       );
-      setUnreadCount((prev) => Math.max(0, prev - 1));
     } catch (err) {
       console.error('Error marking notification as read:', err);
+      toastRef.current.error('No se pudo marcar la notificación como leída');
     }
-  };
+  }, []);
 
-  const markAllAsRead = async () => {
-    if (!user) return;
+  const markAllAsRead = useCallback(async () => {
+    if (!userId) return;
     try {
       const { error } = await supabase
         .from('notifications')
         .update({ is_read: true })
-        .eq('user_id', user.id)
+        .eq('user_id', userId)
         .eq('is_read', false);
 
       if (error) throw error;
 
       setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
-      setUnreadCount(0);
-      toast.success('Todas las notificaciones marcadas como leídas');
+      toastRef.current.success('Todas las notificaciones marcadas como leídas');
     } catch (err) {
       console.error('Error marking all notifications as read:', err);
+      toastRef.current.error('No se pudieron marcar las notificaciones como leídas');
     }
-  };
+  }, [userId]);
+
+  const value = useMemo(
+    () => ({ notifications, unreadCount, isLoading, markAsRead, markAllAsRead, fetchNotifications }),
+    [notifications, unreadCount, isLoading, markAsRead, markAllAsRead, fetchNotifications]
+  );
 
   return (
-    <NotificationContext.Provider
-      value={{
-        notifications,
-        unreadCount,
-        isLoading,
-        markAsRead,
-        markAllAsRead,
-        fetchNotifications
-      }}
-    >
+    <NotificationContext.Provider value={value}>
       {children}
     </NotificationContext.Provider>
   );

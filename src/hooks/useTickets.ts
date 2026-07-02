@@ -1,7 +1,8 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import type { Ticket, TicketStatus, TicketPriority } from '@/lib/types';
 import { useAuth } from '@/contexts/AuthContext';
+import { getErrorMessage } from '@/lib/utils';
 
 export interface TicketFilters {
   status?: string[];
@@ -11,13 +12,27 @@ export interface TicketFilters {
   dateTo?: string;
 }
 
+export interface CreateTicketResult {
+  ticket: Ticket;
+  /** Nombres de archivos que no pudieron adjuntarse (el ticket sí se creó) */
+  failedFiles: string[];
+}
+
+/** Campos extra permitidos al cambiar el estado de un ticket */
+type StatusExtraFields = Partial<Pick<Ticket, 'estimated_hours' | 'rejection_reason'>>;
+
 export const useTickets = () => {
   const { profile } = useAuth();
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [isMutating, setIsMutating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Token de secuencia: descarta respuestas de fetches viejos que resuelven tarde
+  const fetchSeqRef = useRef(0);
+
   const fetchTickets = useCallback(async (spaceId: string, filters?: TicketFilters) => {
+    const seq = ++fetchSeqRef.current;
     setIsLoading(true);
     setError(null);
     try {
@@ -49,13 +64,15 @@ export const useTickets = () => {
       query = query.order('created_at', { ascending: false });
 
       const { data, error: fetchError } = await query;
+      if (seq !== fetchSeqRef.current) return; // respuesta obsoleta
       if (fetchError) throw fetchError;
       setTickets(data as Ticket[]);
-    } catch (err: any) {
+    } catch (err) {
+      if (seq !== fetchSeqRef.current) return;
       console.error(err);
-      setError(err.message || 'Error al obtener tickets');
+      setError(getErrorMessage(err, 'Error al obtener tickets'));
     } finally {
-      setIsLoading(false);
+      if (seq === fetchSeqRef.current) setIsLoading(false);
     }
   }, []);
 
@@ -67,9 +84,12 @@ export const useTickets = () => {
     files: File[],
     tags: string[] = [],
     estimatedHours?: number
-  ) => {
+  ): Promise<CreateTicketResult> => {
     if (!profile) throw new Error('No autenticado');
-    setIsLoading(true);
+    if (estimatedHours !== undefined && profile.role !== 'programador') {
+      throw new Error('Solo el programador puede crear tickets estimados');
+    }
+    setIsMutating(true);
     setError(null);
 
     try {
@@ -84,7 +104,6 @@ export const useTickets = () => {
           priority,
           status: estimatedHours ? 'estimado' : 'pendiente',
           estimated_hours: estimatedHours || null,
-          estimated_at: estimatedHours ? new Date().toISOString() : null,
           tags
         })
         .select()
@@ -92,90 +111,93 @@ export const useTickets = () => {
 
       if (ticketError) throw ticketError;
 
-      // 2. Subir adjuntos si los hay
+      // 2. Subir adjuntos en paralelo. Si alguno falla, el ticket ya existe:
+      //    se informa el fallo sin lanzar, para evitar reintentos que dupliquen el ticket.
+      const failedFiles: string[] = [];
       if (files.length > 0) {
-        for (const file of files) {
-          // Sanitizar nombre de archivo
-          const cleanFileName = file.name.replace(/[^a-zA-Z0-9.]/g, '_');
-          const filePath = `${spaceId}/${ticket.id}/${Date.now()}_${cleanFileName}`;
+        const uploads = await Promise.all(
+          files.map(async (file) => {
+            try {
+              const cleanFileName = file.name.replace(/[^a-zA-Z0-9.]/g, '_');
+              const filePath = `${spaceId}/${ticket.id}/${Date.now()}_${cleanFileName}`;
 
-          const { error: uploadError } = await supabase.storage
-            .from('attachments')
-            .upload(filePath, file);
+              const { error: uploadError } = await supabase.storage
+                .from('attachments')
+                .upload(filePath, file);
 
-          if (uploadError) throw uploadError;
+              if (uploadError) throw uploadError;
 
-          // Obtener URL pública
-          const { data: { publicUrl } } = supabase.storage
-            .from('attachments')
-            .getPublicUrl(filePath);
+              return {
+                ticket_id: ticket.id,
+                file_name: file.name,
+                // Se guarda el path (no una URL pública): el bucket es privado
+                // y la visualización usa URLs firmadas temporales
+                file_url: filePath,
+                file_type: file.type,
+                file_size: file.size
+              };
+            } catch (err) {
+              console.error(`Error subiendo ${file.name}:`, err);
+              failedFiles.push(file.name);
+              return null;
+            }
+          })
+        );
 
-          // Registrar en la DB
+        const rows = uploads.filter((r): r is NonNullable<typeof r> => r !== null);
+        if (rows.length > 0) {
           const { error: attachError } = await supabase
             .from('ticket_attachments')
-            .insert({
-              ticket_id: ticket.id,
-              file_name: file.name,
-              file_url: publicUrl,
-              file_type: file.type,
-              file_size: file.size
-            });
+            .insert(rows);
 
-          if (attachError) throw attachError;
+          if (attachError) {
+            console.error('Error registrando adjuntos:', attachError);
+            failedFiles.push(...rows.map((r) => r.file_name));
+          }
         }
       }
 
-      return ticket as Ticket;
-    } catch (err: any) {
+      return { ticket: ticket as Ticket, failedFiles };
+    } catch (err) {
       console.error(err);
-      setError(err.message || 'Error al crear el ticket');
+      setError(getErrorMessage(err, 'Error al crear el ticket'));
       throw err;
     } finally {
-      setIsLoading(false);
+      setIsMutating(false);
     }
   }, [profile]);
 
   const updateTicketStatus = useCallback(async (
     ticketId: string,
     status: TicketStatus,
-    extraFields?: Record<string, any>
+    extraFields?: StatusExtraFields
   ) => {
-    setIsLoading(true);
+    setIsMutating(true);
     setError(null);
     try {
-      const updateData: Record<string, any> = {
-        status,
-        updated_at: new Date().toISOString(),
-        ...extraFields
-      };
-
-      // Set timestamps based on state
-      if (status === 'estimado') updateData.estimated_at = new Date().toISOString();
-      if (status === 'aprobado') updateData.approved_at = new Date().toISOString();
-      if (status === 'en_progreso') updateData.started_at = new Date().toISOString();
-      if (status === 'resuelto') updateData.resolved_at = new Date().toISOString();
-
+      // Los timestamps (estimated_at, approved_at, etc.) los setea el servidor
       const { data, error: updateError } = await supabase
         .from('tickets')
-        .update(updateData)
+        .update({ status, ...extraFields })
         .eq('id', ticketId)
         .select()
         .single();
 
       if (updateError) throw updateError;
       return data as Ticket;
-    } catch (err: any) {
+    } catch (err) {
       console.error(err);
-      setError(err.message || 'Error al actualizar el estado del ticket');
+      setError(getErrorMessage(err, 'Error al actualizar el estado del ticket'));
       throw err;
     } finally {
-      setIsLoading(false);
+      setIsMutating(false);
     }
   }, []);
 
   const estimateTicket = useCallback(async (ticketId: string, hours: number) => {
+    if (profile?.role !== 'programador') throw new Error('Solo el programador puede estimar tickets');
     return updateTicketStatus(ticketId, 'estimado', { estimated_hours: hours, rejection_reason: null });
-  }, [updateTicketStatus]);
+  }, [profile?.role, updateTicketStatus]);
 
   const approveTicket = useCallback(async (ticketId: string) => {
     return updateTicketStatus(ticketId, 'aprobado');
@@ -186,16 +208,19 @@ export const useTickets = () => {
   }, [updateTicketStatus]);
 
   const startTicket = useCallback(async (ticketId: string) => {
+    if (profile?.role !== 'programador') throw new Error('Solo el programador puede comenzar el trabajo');
     return updateTicketStatus(ticketId, 'en_progreso');
-  }, [updateTicketStatus]);
+  }, [profile?.role, updateTicketStatus]);
 
   const resolveTicket = useCallback(async (ticketId: string) => {
+    if (profile?.role !== 'programador') throw new Error('Solo el programador puede resolver el ticket');
     return updateTicketStatus(ticketId, 'resuelto');
-  }, [updateTicketStatus]);
+  }, [profile?.role, updateTicketStatus]);
 
   return {
     tickets,
     isLoading,
+    isMutating,
     error,
     fetchTickets,
     createTicket,
