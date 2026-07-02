@@ -28,10 +28,10 @@ export const SimpleBarChart: React.FC<SimpleBarChartProps> = ({ title, data }) =
         paddingBottom: '8px',
         borderBottom: '1px solid var(--color-border)'
       }}>
-        {data.map((item, idx) => {
+        {data.map((item) => {
           const percentage = (item.value / maxValue) * 100;
           return (
-            <div key={idx} style={{
+            <div key={item.label} style={{
               display: 'flex',
               flexDirection: 'column',
               alignItems: 'center',

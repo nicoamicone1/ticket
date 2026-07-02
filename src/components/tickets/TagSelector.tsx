@@ -48,6 +48,7 @@ export const TagSelector: React.FC<TagSelectorProps> = ({ selectedTags, onChange
               key={tag}
               type="button"
               onClick={() => handleTogglePredefined(tag)}
+              aria-pressed={isSelected}
               style={{
                 fontSize: 'var(--text-xs)',
                 fontWeight: 'var(--font-medium)',
@@ -98,6 +99,7 @@ export const TagSelector: React.FC<TagSelectorProps> = ({ selectedTags, onChange
             <button
               type="button"
               onClick={() => setShowInput(false)}
+              aria-label="Cancelar nueva etiqueta"
               style={{ color: 'var(--color-error)', display: 'flex' }}
             >
               <X size={14} />
@@ -128,7 +130,7 @@ export const TagSelector: React.FC<TagSelectorProps> = ({ selectedTags, onChange
                 }}
               >
                 {tag}
-                <button type="button" onClick={() => handleRemove(tag)} style={{ display: 'flex', color: 'var(--color-primary)' }}>
+                <button type="button" onClick={() => handleRemove(tag)} aria-label={`Quitar etiqueta ${tag}`} style={{ display: 'flex', color: 'var(--color-primary)' }}>
                   <X size={10} />
                 </button>
               </span>
