@@ -173,6 +173,42 @@ export const useTickets = () => {
     }
   }, []);
 
+  // Estados en los que un ticket todavía puede eliminarse (estimación no aprobada)
+  const DELETABLE_STATUSES: TicketStatus[] = ['pendiente', 'estimado', 'rechazado'];
+
+  const deleteTicket = useCallback(async (ticket: Ticket) => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      if (!DELETABLE_STATUSES.includes(ticket.status)) {
+        throw new Error('Solo se pueden eliminar tickets cuya estimación aún no fue aprobada');
+      }
+
+      // 1. Limpiar archivos adjuntos del storage (best-effort, no bloquea el borrado)
+      const folder = `${ticket.space_id}/${ticket.id}`;
+      const { data: files } = await supabase.storage.from('attachments').list(folder);
+      if (files && files.length > 0) {
+        await supabase.storage
+          .from('attachments')
+          .remove(files.map((f) => `${folder}/${f.name}`));
+      }
+
+      // 2. Eliminar el ticket (la cascada borra adjuntos, comentarios, actividad y notificaciones)
+      const { error: deleteError } = await supabase
+        .from('tickets')
+        .delete()
+        .eq('id', ticket.id);
+
+      if (deleteError) throw deleteError;
+    } catch (err: any) {
+      console.error(err);
+      setError(err.message || 'Error al eliminar el ticket');
+      throw err;
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
   const estimateTicket = useCallback(async (ticketId: string, hours: number) => {
     return updateTicketStatus(ticketId, 'estimado', { estimated_hours: hours, rejection_reason: null });
   }, [updateTicketStatus]);
@@ -199,6 +235,7 @@ export const useTickets = () => {
     error,
     fetchTickets,
     createTicket,
+    deleteTicket,
     estimateTicket,
     approveTicket,
     rejectTicket,

@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { useParams, Link } from 'react-router';
+import { useParams, Link, useNavigate } from 'react-router';
 import { supabase } from '@/lib/supabase';
 import type { Ticket, TicketAttachment } from '@/lib/types';
 import { useAuth } from '@/contexts/AuthContext';
@@ -12,13 +12,14 @@ import { EstimateModal } from '@/components/tickets/EstimateModal';
 import { RejectModal } from '@/components/tickets/RejectModal';
 import { CommentSection } from '@/components/tickets/CommentSection';
 import { ActivityTimeline } from '@/components/tickets/ActivityTimeline';
-import { ArrowLeft, Calendar, AlertCircle, Play, CheckCircle, Calculator, Ban, FileText, Share2 } from 'lucide-react';
+import { ArrowLeft, Calendar, AlertCircle, Play, CheckCircle, Calculator, Ban, FileText, Share2, Trash2 } from 'lucide-react';
 
 export const TicketDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const { profile } = useAuth();
   const toast = useToast();
-  const { estimateTicket, approveTicket, rejectTicket, startTicket, resolveTicket } = useTickets();
+  const { estimateTicket, approveTicket, rejectTicket, startTicket, resolveTicket, deleteTicket } = useTickets();
 
   const [ticket, setTicket] = useState<Ticket | null>(null);
   const [attachments, setAttachments] = useState<TicketAttachment[]>([]);
@@ -122,6 +123,18 @@ export const TicketDetailPage: React.FC = () => {
     }
   };
 
+  const handleDelete = async () => {
+    if (!ticket) return;
+    if (!window.confirm('¿Seguro que querés eliminar este ticket? Esta acción no se puede deshacer.')) return;
+    try {
+      await deleteTicket(ticket);
+      toast.success('Ticket eliminado.');
+      navigate(`/spaces/${ticket.space_id}`);
+    } catch (err: any) {
+      toast.error(err?.message || 'Error al eliminar el ticket');
+    }
+  };
+
   const handleCopyLink = () => {
     navigator.clipboard.writeText(window.location.href);
     toast.success('¡Enlace de aprobación copiado al portapapeles!');
@@ -146,6 +159,9 @@ export const TicketDetailPage: React.FC = () => {
 
   const isClient = profile?.role === 'cliente';
   const isProgrammer = profile?.role === 'programador';
+
+  // Un ticket se puede eliminar mientras su estimación no haya sido aprobada
+  const canDelete = ['pendiente', 'estimado', 'rechazado'].includes(ticket.status);
 
   const getStatusBadgeVariant = (status: string) => {
     switch (status) {
@@ -355,6 +371,18 @@ export const TicketDetailPage: React.FC = () => {
                 </div>
               )}
             </div>
+
+            {/* Eliminar ticket (solo si la estimación aún no fue aprobada) */}
+            {canDelete && (
+              <div style={{ borderTop: '1px solid var(--color-border)', paddingTop: '16px' }}>
+                <Button variant="danger" fullWidth onClick={handleDelete} icon={<Trash2 size={16} />}>
+                  Eliminar Ticket
+                </Button>
+                <p className="text-muted text-xs text-center" style={{ marginTop: '8px' }}>
+                  Podés eliminar el ticket mientras la estimación no esté aprobada.
+                </p>
+              </div>
+            )}
           </Card>
 
           {/* Historial de Actividad */}
